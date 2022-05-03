@@ -1,0 +1,124 @@
+---
+title: "groupproject_zh2448"
+author: "Zhengze Hou"
+date: "5/2/2022"
+output: pdf_document
+---
+## 0. p1 is network graph, p2-p5 are descriptive analysis graphs, p6-p7 are correlation graphs.
+```{r}
+library(jsonlite)
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(networkD3)
+library(visNetwork)
+library(ggplot2)
+library(plotly)
+library(sjPlot)
+## Every user has reviewed one of the bars in Vegas
+elite <- read.csv("10%eliteuser.csv")
+name <- elite[, c("user_id", "friends")]
+review <- read.csv("barreview.csv")
+bar <- read.csv("bar.csv")
+
+
+## 1. Network graph of top elite users(whose fans >= 100 and useful value >=  900)
+net <- separate_rows(name, friends, sep = ",", convert = TRUE)
+## No outside friends now
+net <- net %>%
+  filter(friends %in% user_id)
+## Delete users with no inside followers
+
+net <- rename(net, source = user_id)
+net <- rename(net, target = friends)
+
+netnode <- elite %>%
+  filter(user_id %in% netuser)
+summary(netnode$average_stars)
+
+net <- as.data.frame(net)
+p1 <- simpleNetwork(net, 
+              nodeColour = "blue", 
+              zoom=T,
+              fontSize = 16)
+
+## 1. There is no obvious network between the elite users
+p1
+
+## 2. Descriptive graph
+rc <- review %>%
+  group_by(business_id) %>%
+  summarize(avguseful = mean(useful), count = n())
+bar <- inner_join(bar, rc, by = "business_id")
+rmost <- bar %>%
+  arrange(desc(count)) %>%
+  head(10)
+rmost[8, 4] <- "Downtown"
+rmost <- rmost[, c("count", "name", "neighborhood", "categories")]
+rmost <- rmost[order(rmost[ ,"count"], decreasing = TRUE), ]
+reviewgraph <- ggplot(rmost, aes(x = count, y = reorder(name, count), fill = neighborhood,  text = paste("categories:", categories))) + 
+  geom_bar(stat="identity", width=1, color="white") +
+  labs(x="review count", y="name of bar")
+
+## 2. Which bars are reviewed most?
+p2 <- ggplotly(reviewgraph)
+p2
+
+neighborhood <- bar %>%
+  group_by(neighborhood) %>%
+  summarize(avgstar = mean(stars), count = n())
+neighborhood[1, 1] <- "Not known"
+neighborhoodgraph <- ggplot(neighborhood, aes(x = count, y = reorder(neighborhood, count), fill = round(avgstar, 2))) + 
+  geom_bar(stat="identity", width=1, color="white") +
+  labs(x="review count", y="name of neighborhood")
+
+## 3. Which neighborhood has most bars?
+p3 <- ggplotly(neighborhoodgraph)
+p3
+
+topstar <- mutate(bar, topstar = ifelse(stars >= 4 & review_count >= 100, "Top bars", "Non top bars"))
+toppct <- topstar %>%
+  group_by(topstar) %>%
+  summarize(count = n(), avgreview = mean(review_count))
+
+## 4. The gap between topbars and non top bars
+p4 <- tab_df(toppct)
+p4
+
+topstar <- topstar %>%
+  filter(topstar == "Top bars") %>%
+  group_by(neighborhood) %>%
+  summarize(count = n(), avgstar = mean(stars))
+topstar[1, 1] <- "Not known"
+topbargraph <- ggplot(topstar, aes(x = count, y = reorder(neighborhood, count), fill = round(avgstar, 2))) + 
+  geom_bar(stat="identity", width=1, color="white") +
+  labs(x="review count", y="name of neighborhood")
+
+## 5. Which neighborhood has most top bars?
+p5 <- ggplotly(topbargraph)
+p5
+
+## 6. What influences the elite users' review scores most who has reviewed in Las Vegas.
+lm1 <- lm(average_stars ~ review_count + fans + useful + compliment_hot, elite)
+summary(lm1)
+userstars <- ggplot(data = elite, aes(x = fans, y = average_stars)) +
+  stat_smooth(method = "lm", col = "blue") + 
+  xlab("Number of fans") + ylab("Average stars")
+p6 <- ggplotly(userstars)
+p6
+
+# 6. Does the amount of review have a positive correlation with the bars' reputation in Las Vegas.
+lm2 <- lm(stars ~ review_count, bar, na.action = na.omit)
+summary(lm2)
+barstars <- ggplot(data = bar, aes(x = review_count, y = stars)) +
+  stat_smooth(method = "lm", col = "blue") + 
+  xlab("Number of reviews") + ylab("Average stars")
+p7 <- ggplotly(barstars)
+p7
+
+
+```
+
+
+
+
