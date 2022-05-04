@@ -1,0 +1,97 @@
+---
+title: "Map Visualization for Vegas Bars"
+Author: Naijia Wu
+---
+
+```{r}
+getwd()
+setwd("/Users/naijia.wu/Desktop/Columbia/22spring/Data Visualization/Group_T_digital-products")
+```
+
+```{r}
+vegasbar <- read.csv("bar.csv")
+bus_attr <- read.csv("business_allatt.csv")
+user <- read.csv("10%eliteuser.csv")
+```
+
+
+
+```{r}
+library(readr)
+library(ggplot2)
+library(ggthemes)
+library(maps)
+library(dplyr)
+library("DT")
+library(stringr)
+library("leaflet")
+library(RColorBrewer)
+library("data.table")
+```
+
+```{r}
+library(ggmap)
+register_google(key = "AIzaSyBlZS1dMHmz5qAZww5VQRBBSlJa3VFfyVg", write = TRUE)
+```
+
+# get Las Vegas Map
+```{r}
+map_lv <- get_map("Las Vegas",
+                            zoom = 12,
+                            source = "stamen",
+                            maptype = "toner-background")
+ggmap(map_lv)
+```
+
+
+# map bar location
+```{r}
+g_location <- ggmap(map_lv) + theme_map()
+g_location + geom_point(data=vegasbar, aes(x=longitude,y=latitude),
+                    size=0.3, alpha=0.3, color="blue")
+```
+
+# highlight the bar hot spot
+```{r}
+g_density <- g_location + geom_density2d(aes(x=longitude,y=latitude), 
+  data=vegasbar, color="green", size=1, bins=12) +
+  stat_density2d(aes(x=longitude,y=latitude,
+    fill = ..level.., alpha = ..level..),
+    data=vegasbar, geom = 'polygon', bins=12) +
+  scale_fill_gradient2(low = "green", mid="yellow", high = "red") +
+  scale_alpha(range = c(0.00, 0.5)) 
+g_density
+```
+# Visualize the neighborhood each bar belongs to
+
+```{r}
+#add legend of stars
+lvbar_map_neighborhood <- 
+  leaflet(vegasbar) %>%
+  addTiles() %>%    # Add OpenStreetMap map tiles
+  addCircles(lng = ~longitude, lat = ~latitude)
+
+pal = colorFactor("Set1", domain = vegasbar$neighborhood) # Grab a palette
+color_neighborhood = pal(vegasbar$neighborhood)
+
+lvbar_map_neighborhood %>% addCircles(color=color_neighborhood) %>%
+  addLegend(pal = pal, values = ~vegasbar$neighborhood, title = "Neighborhood")
+
+```
+
+
+```{r}
+content <- paste("Name:",vegasbar$name,"<br/>",
+                 "Address:",vegasbar$address,"<br/>",
+                 "Stars:",vegasbar$stars,"<br/>",
+                 "Neighborhood:", vegasbar$neighborhood,"<br/>")
+
+pal = colorFactor("YlOrRd", domain = vegasbar$stars) # Grab a palette
+color_stars = pal(vegasbar$stars)
+
+lvbar_map %>% addCircles(color=color_stars, popup = content) %>%
+  addLegend(pal = pal, values = ~vegasbar$stars, title = "Stars")
+
+
+
+```

@@ -1,0 +1,206 @@
+---
+title: "groupproject_zh2448"
+author: "Zhengze Hou"
+date: "5/2/2022"
+output:
+  html_document:
+    df_print: paged
+---
+## 0. There are mainly three parts in this analysis. p1, p8 are network graphs, p2-p5 are descriptive analysis graphs, p6-p7 are correlation graphs. 
+```{r}
+library(tidyverse)
+library(dplyr)
+library(readr)
+library(networkD3)
+library(visNetwork)
+library(ggplot2)
+library(plotly)
+library(sjPlot)
+```
+
+##  Among the elite users who have reviewed any of bars in Vegas, what are their relationship? Is there some inside network between these celebrities in Yelp? Or do they just review and travel separately? To figure it out, I find those elite users who also has at least one elite user friend and construct a network between them. As a result, most of the links are individual and not connected to another links. There exists A-B-C chains, which means A is B's friend, and B is C's friend, but no classical social network "circle" or group. On the other word, A is not C's friend. Thus, as Yelp is not a social media, but a review app, elite users don't interact with each other in the app. It is more possible that every elite user is the center of his/her fans, not the center of his/her peers.
+```{r}
+## Every user has reviewed one of the bars in Vegas
+elite <- read.csv("10%eliteuser.csv")
+name <- elite[, c("user_id", "friends")]
+review <- read.csv("barreview.csv")
+bar <- read.csv("bar.csv")
+
+
+## 1. Network graph of top elite users(whose fans >= 100 and useful value >=  900)
+net <- separate_rows(name, friends, sep = ",", convert = TRUE)
+## No outside friends now
+net <- net %>%
+  filter(friends %in% user_id)
+## Delete users with no inside followers
+
+net <- rename(net, source = user_id)
+net <- rename(net, target = friends)
+
+netnode <- elite %>%
+  filter(user_id %in% net$source)
+summary(netnode$average_stars)
+
+net <- as.data.frame(net)
+p1 <- simpleNetwork(net, 
+              nodeColour = "blue", 
+              zoom=T,
+              fontSize = 16)
+
+##  There is no obvious network between the elite users
+p1
+```
+
+## While there is no group among the elite(influential) users, the other problem is whether this kind of group exists among the bars in Vegas. We assume that when a consumer goes to bar A, he/she will be more accessible to bar B in the same group because of recommendation or similarity. If there is a large portion of consumers go to both Bar A and Bar B, these two bars will be more possible to be in the same group compared to Bar C outside. Thus, we check all the reviews of top50 bar in Vegas beased on review_count. Then we extract the reviewers' id of every bar. After that, we define at least more than 50 common reviewers between two bars can be seen as a link. Finally, a network of bars is constructed. The links' sizes mean the number of common consumers. The nodes' sizes mean the number of reviews. While the colours of nodes mean different neighborhood in Vegas.
+
+## In this graph, we can find that there are so many links between these bars. Basicaaly, all the top bars are clustered and not far away from each other. Of course, if you are a consumer seeking a different or similar bar compared to the previous one, you can just use this graph to find your preferred next bar. As an owner of a bar, you can also find your friend bars(or actually competitors). 
+
+## Furthermore, it is obvious that the locaion doesn't separate the bars in different groups. Perhaps Vegas is not a big place, so the distance doesn't matter.  
+```{r}
+## 8. Append: Network of bars
+rb <- review %>%
+  group_by(business_id) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count)) %>%
+  head(50)
+r50 <- review %>%
+   filter(business_id %in% rb$business_id) %>%
+   select(user_id, business_id)
+
+## One bar have a branch in very close location also listed in top50, so actually the number of bars is 49
+
+r50 <- left_join(r50, bar, by = "business_id")
+r50 <- r50[, c("user_id", "name", "neighborhood", "review_count")]
+r50$name<-gsub('["]',"", r50$name)
+r50$name <- ifelse(r50$name == "Bachi Burger" & r50$neighborhood == "Southeast",  "Bachi Burger(SE)", r50$name)
+r50 <- mutate(r50, barnum = as.factor(name))
+barlink <- NULL
+ for (i in 1 : 48) {
+   for (j in i : 48) {
+      a <- r50 %>% filter(as.numeric(barnum) == i)
+      a <- a$user_id
+      b <- r50 %>% filter(as.numeric(barnum) == j)
+      b <- b$user_id
+      c <- intersect(a, b)
+      d <- length(c)
+      tmp <- c(i, j, d)
+      barlink <- rbind(barlink, tmp)
+   }
+}
+barlink <- as.data.frame(barlink)
+barlink <- barlink %>% 
+  filter(V1 != V2) %>% 
+  filter(V3 > 0)
+barlink <- rename(barlink, source = V1, target = V2, value = V3)
+barlink2 <- barlink %>% filter(value >= 50)
+barlink2$value <- barlink2$value / 50
+barlink2$source = barlink2$source - 1
+barlink2$target = barlink2$target - 1  
+barnode <- r50[, c("barnum", "neighborhood", "review_count")] %>% 
+     distinct()
+barnode$neighborhood <- as.factor(barnode$neighborhood)
+barnode$rcsize <- barnode$review_count / 100 - 10
+p8 <- forceNetwork(Links = barlink2, 
+             Nodes = barnode, 
+             Source = "source",
+             Target = "target", 
+             Value = "value", 
+             NodeID = "barnum",
+             Nodesize = "rcsize",
+             Group = "neighborhood", 
+             opacity = 0.6, zoom = TRUE)
+p8
+```
+
+## If you would like to know some basic information of bars in Vegas. Here are the tables. The most popular 10 bars are listed below for your recommendation. Do you want to go to Lotus of Siam or Bachi Burger?
+```{r}
+##  Descriptive graph
+rc <- review %>%
+  group_by(business_id) %>%
+  summarize(avguseful = mean(useful), count = n())
+bar <- inner_join(bar, rc, by = "business_id")
+rmost <- bar %>%
+  arrange(desc(count)) %>%
+  head(10)
+rmost[8, 4] <- "Downtown"
+rmost <- rmost[, c("count", "name", "neighborhood", "categories")]
+rmost <- rmost[order(rmost[ ,"count"], decreasing = TRUE), ]
+reviewgraph <- ggplot(rmost, aes(x = count, y = reorder(name, count), fill = neighborhood,  text = paste("categories:", categories))) + 
+  geom_bar(stat="identity", width=1, color="white") +
+  labs(x="review count", y="name of bar")
+
+## 2. Which bars are reviewed most?
+p2 <- ggplotly(reviewgraph)
+p2
+```
+
+## This picture tells you the distribution of bars in Vegas' neighborhood. The strip is leading, and Eastside and Downtown are also great. However, if we take the average review scores into account, maybe Downtown is the best area for entertainment.
+```{r}
+neighborhood <- bar %>%
+  group_by(neighborhood) %>%
+  summarize(avgstar = mean(stars), count = n())
+neighborhood[1, 1] <- "Not known"
+neighborhoodgraph <- ggplot(neighborhood, aes(x = count, y = reorder(neighborhood, count), fill = round(avgstar, 2))) + 
+  geom_bar(stat="identity", width=1, color="white") +
+  labs(x="review count", y="name of neighborhood")
+
+## 3. Which neighborhood has most bars?
+p3 <- ggplotly(neighborhoodgraph)
+p3
+```
+
+## This table tells you if we define the bars who have in average more than 4 stars and greater than 100 reviews are the top bars, how many of all the bars in Vegas are the top bars. The result is that only 240 bars are top, and the rest 1139 are normal. The gap of average review counts in the two types of bars is huge. Even in Vegas, good bars are rare. But their popularity and quality are undoubtful.
+```{r}
+topstar <- mutate(bar, topstar = ifelse(stars >= 4 & review_count >= 100, "Top bars", "Non top bars"))
+toppct <- topstar %>%
+  group_by(topstar) %>%
+  summarize(count = n(), avgreview = mean(review_count))
+
+## 4. The gap between topbars and non top bars
+p4 <- tab_df(toppct)
+p4
+```
+
+## In the distribution of top bars, we find Spring Valley and China town are great areas. They are easy to be ignored if we just concentrate to the location crowded with bars.
+```{r}
+topstar <- topstar %>%
+  filter(topstar == "Top bars") %>%
+  group_by(neighborhood) %>%
+  summarize(count = n(), avgstar = mean(stars))
+topstar[1, 1] <- "Not known"
+topbargraph <- ggplot(topstar, aes(x = count, y = reorder(neighborhood, count), fill = round(avgstar, 2))) + 
+  geom_bar(stat="identity", width=1, color="white") +
+  labs(x="review count", y="name of neighborhood")
+
+## 5. Which neighborhood has most top bars?
+p5 <- ggplotly(topbargraph)
+p5
+```
+
+## Then let us dig deeper to discover the relationship among the attributes of elite users who has reviewed in Vegas' bars. It seems that you will be more picky when you experience more places. But you may also be more conservative to criticize when your number of fans increases. The first linear regression graph shows this trend.
+```{r}
+## 6. What influences the elite users' review scores most who has reviewed in Las Vegas.
+lm1 <- lm(average_stars ~ review_count + fans + useful + compliment_hot, elite)
+summary(lm1)
+userstars <- ggplot(data = elite, aes(x = fans, y = average_stars)) +
+  stat_smooth(method = "lm", col = "blue") + 
+  xlab("Number of fans") + ylab("Average stars")
+p6 <- ggplotly(userstars)
+p6
+```
+
+## It is said that some popular bars or restaurants may not worth a high review score. But at least this linear regression proves that bars in Vegas with more reviews tend to have higher reputation. They are worthy of their names.
+```{r}
+# 7. Does the amount of review have a positive correlation with the bars' reputation in Las Vegas.
+lm2 <- lm(stars ~ review_count, bar, na.action = na.omit)
+summary(lm2)
+barstars <- ggplot(data = bar, aes(x = review_count, y = stars)) +
+  stat_smooth(method = "lm", col = "blue") + 
+  xlab("Number of reviews") + ylab("Average stars")
+p7 <- ggplotly(barstars)
+p7
+```
+
+
+
+

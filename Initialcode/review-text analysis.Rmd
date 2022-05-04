@@ -1,0 +1,518 @@
+---
+title: "Yelp"
+author: "Mengting Wang"
+date: "2022/4/29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+read data：
+```{r}
+
+bar <- read.csv("bar.csv")
+barreview <- read.csv("barreview.csv")
+```
+
+load library:
+```{r warning=TRUE}
+library(tidyverse) 
+library(stringr)
+library(wordcloud) 
+library(tidytext) 
+library(DT) 
+library(dplyr)
+library(leaflet) 
+```
+
+Most Popular Categories regarding bars:
+```{r}
+fillColor = "#FFA07A"
+fillColor2 = "#F1C40F"
+
+categories = str_split(bar$categories,";")
+categories = as.data.frame(unlist(categories))
+colnames(categories) = c("Name")
+
+categories %>%
+  group_by(Name) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  ungroup() %>%
+  mutate(Name = reorder(Name,Count)) %>%
+  head(10) %>%
+  
+  
+  ggplot(aes(x = Name,y = Count)) +
+  geom_bar(stat='identity',colour="white", fill =fillColor2) +
+  geom_text(aes(x = Name, y = 1, label = paste0("(",Count,")",sep="")),
+            hjust=0, vjust=.5, size = 4, colour = 'black',
+            fontface = 'bold') +
+  labs(x = 'Name of Category', y = 'Count', 
+       title = 'Top 10 Categories regarding bars') +
+  coord_flip() + 
+  theme_bw()
+
+```
+
+Bars with most number of five Star Reviews:
+```{r}
+stars_5 <- barreview %>%
+  filter(stars ==5) %>%
+  group_by(business_id) %>%
+  select(business_id,stars,text) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  ungroup() 
+
+
+five = merge(stars_5, bar, by= "business_id")
+five2 <- five %>%
+  filter(stars ==5) %>%
+  filter(is_open==1)
+
+fivestar <- five2 %>%
+  arrange(stars) %>%
+  head(10)
+```
+
+```{r}
+
+fillColor2 = "#F1C40F"
+
+fivestar %>%
+  mutate(name = reorder(name,Count)) %>%
+  ggplot(aes(x = name,y = Count)) +
+  geom_bar(stat='identity',colour="white", fill = fillColor2) +
+  geom_text(aes(x = name, y = 1, label = paste0("(",Count,")",sep="")),
+            hjust=0, vjust=.5, size = 2, colour = 'black',
+            fontface = 'bold') +
+  labs(x = 'Name of the Bars', 
+       y = 'Count', 
+       title = 'Name of the bars and Count') +
+  coord_flip() +
+  theme_bw()
+```
+
+Most 5 starred bar - J Karaoke Bar:
+```{r}
+J_karaoke = bar %>% filter(business_id == "3pSUr_cdrphurO6m1HMP9A") %>%
+  select(name,neighborhood,city,state,postal_code,categories)
+
+datatable(head(J_karaoke), style="bootstrap", class="table-condensed", options = list(dom = 'tp',scrollX = TRUE))
+```
+
+A wordcloud to see the common words of reviews on "J Karaoke Bar"
+```{r}
+createWordCloud = function(train)
+{
+  train %>%
+  unnest_tokens(word, text) %>%
+  filter(!word %in% stop_words$word) %>%
+  count(word,sort = TRUE) %>%
+  ungroup()  %>%
+  head(30) %>%
+  
+  with(wordcloud(word, n, max.words = 30,colors=brewer.pal(8, "Dark2")))
+}
+
+createWordCloud(barreview %>%
+  filter(business_id == "3pSUr_cdrphurO6m1HMP9A"))
+```
+
+From the wordcloud, we can derive the ingisht that people praise the atmosphere, music, cleaning environment, services and food(especially chicken) in this bar, and indicates that they spend happy and comfortable time in this J Karaoke bar.
+
+
+Similarly, let's visualize the bars with most number of one star reviews:
+```{r}
+#library()
+stars_1 <- barreview %>%
+  filter(stars ==1|stars==1.5) %>%
+  group_by(business_id) %>%
+  select(business_id,stars,text) %>%
+  summarise(Count = n()) %>%
+  arrange(desc(Count)) %>%
+  ungroup() 
+
+
+one = merge(stars_1, bar, by= "business_id")
+one2 <- one %>%
+  filter(stars ==1|stars==1.5) %>%
+  filter(is_open==1)
+
+onestar <- one2 %>%
+  arrange(stars) %>%
+  head(10)
+
+fillColor2 = "#F1C40F"
+
+onestar %>%
+  mutate(name = reorder(name,Count)) %>%
+  ggplot(aes(x = name,y = Count)) +
+  geom_bar(stat='identity',colour="white", fill = fillColor2) +
+  geom_text(aes(x = name, y = 1, label = paste0("(",Count,")",sep="")),
+            hjust=0, vjust=.5, size = 2, colour = 'black',
+            fontface = 'bold') +
+  labs(x = 'Name of the Bars', 
+       y = 'Count', 
+       title = 'Name of the bars and Count') +
+  coord_flip() +
+  theme_bw()
+```
+
+Surprisingly, the bar named "Triumph property management" only has one star rating, and there are 12 reviews on that bar.
+
+So we are interested to see the common words of reviews on "Triumph property management":
+```{r}
+createWordCloud = function(train)
+{
+  train %>%
+  unnest_tokens(word, text) %>%
+  filter(!word %in% stop_words$word) %>%
+  count(word,sort = TRUE) %>%
+  ungroup()  %>%
+  head(30) %>%
+  
+  with(wordcloud(word, n, max.words = 30,colors=brewer.pal(8, "Dark2")))
+}
+
+createWordCloud(barreview %>%
+  filter(business_id == "Zh6fxrqsKqdSVmTK3roxBQ"))
+```
+
+People in their reviews complain about the house/environment of the bar.
+
+Let's create a datatable to see some information regarding "Triumph property management":
+```{r}
+Triumph = bar %>% filter(business_id == "Zh6fxrqsKqdSVmTK3roxBQ") %>%
+  select(name,neighborhood,city,state,postal_code,categories)
+
+datatable(head(Triumph), style="bootstrap", class="table-condensed", options = list(dom = 'tp',scrollX = TRUE))
+```
+
+
+
+define 5-star and 1-star bar datasets with reviews
+```{r}
+goodbar <- barreview %>%
+  filter(stars == 5) %>%
+  group_by(business_id) %>%
+  ungroup()
+
+star_five <- merge(goodbar,bar,by = "business_id")
+
+badbar <- barreview %>%
+  filter(stars == 1) %>%
+  group_by(business_id) %>%
+  ungroup()
+
+star_one <- merge(badbar,bar,by = "business_id")
+```
+
+
+preprocessing reviews
+```{r}
+library(tm)
+df_five = data.frame(doc_id = star_five$business_id, text = star_five$text,stringsAsFactors = F)
+star_five2 <- DataframeSource(df_five)
+star_five2 <- VCorpus(star_five2)
+
+df_one = data.frame(doc_id = star_one$business_id, text = star_one$text,stringsAsFactors = F)
+star_one2 <- DataframeSource(df_one)
+star_one2 <- VCorpus(star_one2)
+```
+
+
+```{r}
+#Remove unnecessary words(stop words), synatx, punctuation, numbers, white space etc.
+library(stringr)
+remove_nonalphanum <- function(x){str_replace_all(x, "[^[:alnum:]]", " ")}
+remove_brandnames <- function(x){str_replace_all(x, "\\b[A-Z]+\\b", " ")}
+
+clean_corpus <- function(corpus){
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, content_transformer(remove_nonalphanum))
+  corpus <- tm_map(corpus, content_transformer(remove_brandnames))
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en")))
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, stripWhitespace)
+  return(corpus)
+}
+```
+
+
+```{r}
+#cleaning two datasets
+star_five_clean <- clean_corpus(star_five2)
+star_one_clean <- clean_corpus(star_one2)
+```
+
+```{r}
+#create a document-term-matrix:
+library(tm)
+#create the dtm from the corpus
+corpus_five_dtm <- DocumentTermMatrix(star_five_clean)
+corpus_one_dtm <- DocumentTermMatrix(star_one_clean)
+
+```
+
+```{r}
+#provide a word cloud of the most frequent words for "five_star" bars and "one_star" bars
+library(tidytext)
+corpus_five_dt <- tidy(corpus_five_dtm)
+corpus_one_dt <- tidy(corpus_one_dtm) 
+head(corpus_five_dt)
+```
+
+```{r}
+#tf-idf
+corpus_five_tdidf <- corpus_five_dt %>%
+  bind_tf_idf(term, document, count) %>%
+  arrange(desc(tf_idf))
+
+corpus_one_tdidf <- corpus_one_dt %>%
+  bind_tf_idf(term, document, count) %>%
+  arrange(desc(tf_idf))
+
+head(corpus_five_tdidf)
+```
+
+```{r}
+term_frequency_DT_five <- corpus_five_tdidf
+term_frequency_DT_one <- corpus_one_tdidf
+
+library(wordcloud)
+```
+
+```{r warning=TRUE}
+#Set seed
+set.seed(2103)
+
+#create a wordcloud to show the frequent words of five stars bars
+wordcloud(term_frequency_DT_five$term, term_frequency_DT_five$tf,
+          max.words=50, colors=brewer.pal(8, "Dark2"))
+```
+
+```{r}
+#create a wordcloud to show the frequent words of one stars bars
+wordcloud(term_frequency_DT_one$term, term_frequency_DT_one$tf,
+          max.words=50, colors=brewer.pal(8, "Dark2"))
+```
+
+A pyramid plot to show how the words between five-stars and one-stars bars differ in word frequency:
+```{r}
+#combine corpus of the most successful and unsuccessful projects
+#select top 20 words
+corpus_five_dt$bestworst <- "Top"
+corpus_one_dt$bestworst <- "Bottom"
+corpus_top_bottom_dt <- rbind(corpus_five_dt,corpus_one_dt)
+
+
+corpus_top_bottom_count <- corpus_top_bottom_dt %>%
+  group_by(term) %>%
+  summarize(total_word = sum(count)) %>%
+  arrange(desc(total_word)) %>%
+  head(20)
+```
+
+```{r}
+pyramid = left_join(corpus_top_bottom_dt, corpus_top_bottom_count, by='term')
+
+pyramid <- pyramid %>%
+  filter(!is.na(total_word)) %>%
+  group_by(bestworst) %>%
+  mutate(count_plot = ifelse(bestworst == 'Bottom', count*(-1), count))
+
+```
+
+```{r}
+ggplot(pyramid, aes(x = reorder(term, total_word),
+                  y = count_plot, fill = bestworst)) +
+  geom_bar(data = filter(pyramid, bestworst == "Top"), stat = "identity") +
+  geom_bar(data = filter(pyramid, bestworst == "Bottom"), stat = "identity") +
+  scale_fill_brewer(palette = "Set1", direction=-1) +
+  coord_flip() +
+  scale_y_continuous(breaks = seq(-50,50,25)) +
+  scale_fill_discrete(name = 'bars star rating', labels=c('one star', 'five star')) +
+  ylab("") +
+  ggthemes::theme_tufte() + 
+  labs(
+    x = 'Top 20 Words',
+    y= 'Count',
+    title = 'Pyramid Plot of Top 20 Words, for one star bars and five star bars'
+  )
+```
+
+Sentiment analysis of reviews:
+
+Positive v.s. negative words in the reivews of J Karaoke Bar
+```{r}
+library(tidytext)
+library(tidyverse)
+
+positiveWordsBarGraph <- function(SC) {
+  contributions <- SC %>%
+    unnest_tokens(word, text) %>%
+    count(word,sort = TRUE) %>%
+    ungroup() %>%
+    
+    inner_join(get_sentiments("afinn"), by = "word") %>%
+    group_by(word) %>%
+    summarize(occurences = n(),
+              contribution = sum(value))
+
+  
+  contributions %>%
+    top_n(20, abs(contribution)) %>%
+    mutate(word = reorder(word, contribution)) %>%
+    head(20) %>%
+    ggplot(aes(word, contribution, fill = contribution > 0)) +
+    geom_col(show.legend = FALSE) +
+    coord_flip() + theme_bw()
+}
+
+positiveWordsBarGraph(barreview %>%
+                       filter(business_id == "3pSUr_cdrphurO6m1HMP9A"))
+```
+
+calculate sentiment for "J Karaoke Bar"
+
+```{r}
+J_Karaoke_reviews = star_five %>%
+  filter(business_id == "3pSUr_cdrphurO6m1HMP9A")
+
+calculate_sentiment <- function(review)
+{
+  sentiment_lines  =  review %>%
+                  unnest_tokens(word, text) %>%
+                  inner_join(get_sentiments("afinn"), by = "word") %>%
+                  group_by(user_id) %>%
+                  summarize(sentiment = mean(value),words = n()) %>%
+                  ungroup() %>%
+                  filter(words >= 10) 
+
+  return(sentiment_lines)
+  
+}
+
+
+sentiment_lines = calculate_sentiment(J_Karaoke_reviews)
+
+head(sentiment_lines)
+```
+
+Display top 10 most positive reviews for 5 star bars:
+```{r}
+display_pos_sentiments <- function(sentiment_lines,review_text)
+{
+  pos_sentiment_lines = sentiment_lines %>%
+  arrange(desc(sentiment))  %>%
+  top_n(10, sentiment) %>%
+  inner_join(review_text, by = "user_id") %>%
+  select(date,sentiment,text) 
+  
+datatable(pos_sentiment_lines, style="bootstrap", class="table-condensed", options = list(dom = 'tp',scrollX = TRUE))
+
+}
+
+display_pos_sentiments(sentiment_lines,J_Karaoke_reviews)
+```
+
+Positive v.s. negative words in the reivews of Triumph property management
+```{r}
+positiveWordsBarGraph <- function(SC) {
+  contributions <- SC %>%
+    unnest_tokens(word, text) %>%
+    count(word,sort = TRUE) %>%
+    ungroup() %>%
+    
+    inner_join(get_sentiments("afinn"), by = "word") %>%
+    group_by(word) %>%
+    summarize(occurences = n(),
+              contribution = sum(value))
+
+  
+  contributions %>%
+    top_n(20, abs(contribution)) %>%
+    mutate(word = reorder(word, contribution)) %>%
+    head(20) %>%
+    ggplot(aes(word, contribution, fill = contribution > 0)) +
+    geom_col(show.legend = FALSE) +
+    coord_flip() + theme_bw()
+}
+
+positiveWordsBarGraph(barreview %>%
+                       filter(business_id == "Zh6fxrqsKqdSVmTK3roxBQ"))
+```
+
+```{r}
+Triumph_reviews = barreview %>%
+  filter(business_id == "Zh6fxrqsKqdSVmTK3roxBQ")
+
+calculate_sentiment <- function(review)
+{
+  sentiment_lines  =  review %>%
+                  unnest_tokens(word, text) %>%
+                  inner_join(get_sentiments("afinn"), by = "word") %>%
+                  group_by(user_id) %>%
+                  summarize(sentiment = mean(value),words = n()) %>%
+                  ungroup() %>%
+                  filter(words >= 10) 
+
+  return(sentiment_lines)
+  
+}
+
+
+sentiment_lines = calculate_sentiment(Triumph_reviews)
+```
+
+Display top 10 most negative reviews for Triumph property management:
+```{r}
+display_neg_sentiments <- function(sentiment_lines,review_text)
+{
+  neg_sentiment_lines = sentiment_lines %>%
+  arrange(desc(sentiment))  %>%
+  top_n(-10, sentiment) %>%
+  inner_join(review_text, by = "user_id") %>%
+  select(date,sentiment,text) 
+  
+datatable(neg_sentiment_lines, style="bootstrap", class="table-condensed", options = list(dom = 'tp',scrollX = TRUE))
+}
+
+display_neg_sentiments(sentiment_lines,Triumph_reviews)
+```
+
+
+
+Visualize the geographical location of the top 10 five star bars(blue dot) and bottom 1 star or 1.5 star bars(yellow dot):
+```{r warning=TRUE}
+library(devtools)
+devtools::install_github("rstudio/leaflet")
+```
+
+```{r}
+
+LasvegasCoords = bar %>% filter(city == "Las Vegas")
+center_lon = median(LasvegasCoords$longitude,na.rm = TRUE)
+center_lat = median(LasvegasCoords$latitude,na.rm = TRUE)
+
+map <- leaflet(rbind(fivestar,onestar)) %>%
+  addProviderTiles("Esri.NatGeoWorldMap") %>%
+  addCircles(lng = ~longitude, lat = ~latitude,radius = ~sqrt(review_count))  %>%
+  addCircleMarkers(data=fivestar,col="blue",group="fivestar") %>%
+  addCircleMarkers(data=onestar,color='yellow',group="onestar") %>%
+    #Layers control
+  addLayersControl(overlayGroups = c("fivestar","onestar"),
+                   options = layersControlOptions(collapsed = FALSE)
+                   ) %>%
+  # controls
+  setView(lng=center_lon, lat=center_lat,zoom = 13)
+```
+```{r}
+map
+```
+
+Top five stars bars are more centralized and concentrated; while the worst one star bars are relatively more sparse in their location, and are not close to transportation hub.
