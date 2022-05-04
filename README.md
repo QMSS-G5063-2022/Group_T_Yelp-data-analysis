@@ -1,4 +1,4 @@
-# Group_T_digital-products
+# Group_T_Yelp data analysis
 
 Hello there!
 This is group T with extensive data visualizations of yelp dataset.
