@@ -13,6 +13,9 @@ https://www.kaggle.com/datasets/yelp-dataset/yelp-dataset
 **Github pages**
 https://mmmelowang.github.io/mmmelowang-github.io/
 
+**Presentation video**
+https://drive.google.com/file/d/1N0M2rUkx_K3QtRIluWPA7cmU3wLPvjFw/view?usp=sharing
+
 **Team members:**
 
 Mengting Wang
